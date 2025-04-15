@@ -27,6 +27,35 @@ from urllib.parse import urlparse
 
 
 
+url = "https://github.com/adityav1810/llm-project/raw/main/"
+
+# Define the directory and filename
+directory = "data"
+# filenames = ["synthetic_stock_data.csv","Apple_quarterly_report.pdf","tesla_quarterly_report.pdf","Microsoft_10Q.pdf"]
+filenames = ["synthetic_stock_data.csv"]
+
+
+# Create directory if it doesn't exist
+if not os.path.exists(directory):
+    os.makedirs(directory)
+    print(f"Directory '{directory}' created.")
+else:
+    print(f"Directory '{directory}' already exists.")
+
+for filename in filenames:
+    filepath = os.path.join(directory, filename)
+    # Download the CSV file
+    response = requests.get(url + filepath)
+
+
+    # Save the file to the directory
+    with open(filepath, "wb") as f:
+        f.write(response.content)
+        print(f"File saved to {filepath}")
+
+
+
+
 
 
 
@@ -348,31 +377,6 @@ def get_financial_answer(user_question: str, pdf_files: Union[List, None] = None
 
 st.title("AI Agent for Financial Analysis")
 
-url = "https://github.com/adityav1810/llm-project/raw/main/"
-
-# Define the directory and filename
-directory = "data"
-# filenames = ["synthetic_stock_data.csv","Apple_quarterly_report.pdf","tesla_quarterly_report.pdf","Microsoft_10Q.pdf"]
-filenames = ["synthetic_stock_data.csv"]
-
-
-# Create directory if it doesn't exist
-if not os.path.exists(directory):
-    os.makedirs(directory)
-    print(f"Directory '{directory}' created.")
-else:
-    print(f"Directory '{directory}' already exists.")
-
-for filename in filenames:
-    filepath = os.path.join(directory, filename)
-    # Download the CSV file
-    response = requests.get(url + filepath)
-
-
-    # Save the file to the directory
-    with open(filepath, "wb") as f:
-        f.write(response.content)
-        print(f"File saved to {filepath}")
 
 
 uploaded_files = st.file_uploader("Upload 3 PDF files", type="pdf", accept_multiple_files=True)
