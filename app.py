@@ -1,3 +1,4 @@
+
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document,HumanMessage
 from langchain.vectorstores import FAISS
@@ -367,10 +368,22 @@ def get_financial_answer(user_question: str, pdf_files: Union[List, None] = None
         "pdf_files": pdf_files
     })
 
-    final = result.get("final_answer", {})
-    if isinstance(final, dict) and "content" in final:
-        return final["content"]
-    return final if isinstance(final, str) else str(final)
+    final = result.get("final_answer", "No answer returned.")
+    # Check if it's an AIMessage object and extract content
+    if hasattr(final, "content"):
+        return final.content
+
+    # If it's already a string
+    if isinstance(final, str):
+        return final
+
+    # If it's a dict with 'content' key
+    if isinstance(final, dict):
+        return final.get("content", str(final))
+
+    # Fallback to string
+    return str(final)
+
 
 
 # call streamlit 
