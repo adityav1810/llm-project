@@ -348,7 +348,7 @@ st.title("📄 PDF Q&A App")
 uploaded_files = st.file_uploader("Upload 3 PDF files", type="pdf", accept_multiple_files=True)
 question = st.text_input("Ask a question based on the PDFs")
 if uploaded_files and len(uploaded_files) == 3 and question:
-    answer = get_financial_answer(uploaded_files,question)
+    answer = get_financial_answer(question,uploaded_files)
     st.subheader("Answer:")
     st.write(answer)
 elif uploaded_files and len(uploaded_files) != 3:
