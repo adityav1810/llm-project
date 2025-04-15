@@ -1,4 +1,3 @@
-langchain-community
 langchain 
 langgraph 
 faiss-cpu 
@@ -14,3 +13,4 @@ lxml_html_clean
 langchain-openai
 langchain-anthropic
 langchain_huggingface
+langchain-community
