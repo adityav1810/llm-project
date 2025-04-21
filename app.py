@@ -1,4 +1,4 @@
-
+%%writefile app.py
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document,HumanMessage
 from langchain.vectorstores import FAISS
@@ -26,9 +26,12 @@ import re
 import requests
 from urllib.parse import urlparse
 
-
+from mistralai import Mistral, UserMessage
+from langchain.llms.base import LLM
+from sqlalchemy import create_engine, text
 
 url = "https://github.com/adityav1810/llm-project/raw/main/"
+mistral_client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
 
 # Define the directory and filename
 directory = "data"
@@ -67,7 +70,7 @@ df.to_sql("stock_data", conn, if_exists="replace", index=False)
 conn.commit()
 conn.close()
 
-#scrape new articles 
+#scrape new articles
 def is_url(text: str) -> bool:
     return re.match(r'^https?://', text) is not None
 
@@ -120,8 +123,8 @@ def query_db(question):
     sql_chain = SQLDatabaseChain.from_llm(llm=mistral_llm, db=db, verbose=True)
     return sql_chain.run(question)
 
-#synthesizer agent 
-def synthesize(question, structured=None, context=None, concept=None, news=None):
+#synthesizer agent
+def synthesize(question, stock=None, context=None, concept=None, news=None):
     '''
     Uses all the agents to synthesize a response to the user's question
     '''
@@ -129,7 +132,7 @@ def synthesize(question, structured=None, context=None, concept=None, news=None)
     prompt = f"""
     Use the following to answer the question:
 
-    Structured:\n{structured or '[None]'}
+    Stock:\n{stock or '[None]'}
     Filing:\n{context or '[None]'}
     News:\n{news or '[None]'}
     Concept:\n{concept or '[None]'}
@@ -137,6 +140,7 @@ def synthesize(question, structured=None, context=None, concept=None, news=None)
     Answer:\n{question}
     """
     return llm.invoke(prompt)
+
 
 #register functions as tools for ai agents to call
 @tool
@@ -163,12 +167,63 @@ def router_tool(user_question: str) -> str:
     return {"route": route.strip().lower()}
 
 @tool
-def stock_tool(user_question: str) -> str:
-    '''
-    Uses Mistral to convert natural language to SQL to query databases
-    '''
-    result = query_db(user_question)
-    return {"structured": result}
+def stock_tool(user_question: str) -> Dict[str, str]:
+    """
+    Uses Mistral API to generate SQL and query SQLite DB for stock-related questions.
+    """
+
+    prompt = f"""
+    You are an expert SQL assistant.
+
+    Here is the schema of the table `stock_data`:
+    - date (date)
+    - company (text)
+    - sector (text)
+    - open (real)
+    - high (real)
+    - low (real)
+    - close (real)
+    - volume (real)
+    - market_cap (real)
+    - pe_ratio (real)
+    - dividend_yield (real)
+    - volatility (real)
+    - sentiment_score (real)
+    - trend (real)
+
+    Write a valid SQLite query for the question below using these column names exactly.
+
+    User question: "{user_question}"
+
+    Only return the SQL query in a single line with no explanation or notes.
+    """
+
+    response = mistral_client.chat.complete(
+        model="mistral-medium",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    sql_output = response.choices[0].message.content.strip()
+    print("Raw Mistral Output:", sql_output)
+
+    # Extract SQL only
+    match = re.search(r"(?i)(select\s.+?);?$", sql_output, re.DOTALL)
+    if not match:
+        return {"stock": "Failed to extract SQL from model output."}
+    sql_query = match.group(1).strip()
+    sql_query = sql_query.replace(r"\_", "_")
+    print("Final SQL:", sql_query)
+
+    # Run the SQL
+    engine = create_engine("sqlite:////content/data/stock_data.db")
+    try:
+        with engine.connect() as conn:
+            df = pd.read_sql_query(sql_query, conn)
+            val = df.iloc[0, 0]
+            return {"stock": f"{val:.2f}"}
+    except Exception as e:
+        return {"stock": f"SQL execution failed: {e}"}
+
 
 @tool
 def filing_tool(user_question: str, pdf_files: Union[List, None] = None) -> Dict[str, str]:
@@ -203,30 +258,6 @@ def filing_tool(user_question: str, pdf_files: Union[List, None] = None) -> Dict
     result = qa.run(user_question)
 
     return {"context": result}
-    # try:
-    #     qa = RetrievalQA.from_chain_type(
-    #         llm=ChatAnthropic(model="claude-3-opus-20240229"),
-    #         retriever=retriever
-    #     )
-    #     result = qa.run(user_question)
-
-    #     if any(err in result.lower() for err in ["overload", "rate limit", "try again", "error", "exceeded"]):
-    #         raise RuntimeError("Claude likely overloaded: triggering fallback.")
-
-    #     return {"context": result}
-
-    # except Exception as e:
-    #     print(f"Claude RetrievalQA failed: {e}. Falling back to GPT-4 RAG...")
-
-    #     # GPT-4 fallback with same retriever
-    #     qa = RetrievalQA.from_chain_type(
-    #         llm=ChatOpenAI(model="gpt-4"),
-    #         retriever=retriever
-    #     )
-    #     result = qa.run(user_question)
-    #     return {"context": result}
-
-
 
 @tool
 def news_tool(user_question: str) -> Dict[str, str]:
@@ -386,7 +417,7 @@ def get_financial_answer(user_question: str, pdf_files: Union[List, None] = None
 
 
 
-# call streamlit 
+# call streamlit
 
 st.title("AI Agent for Financial Analysis")
 
