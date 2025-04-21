@@ -1,4 +1,3 @@
-%%writefile app.py
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document,HumanMessage
 from langchain.vectorstores import FAISS
