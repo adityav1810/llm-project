@@ -325,6 +325,7 @@ def synthesize_tool(user_question: str, stock: str = None, context: str = None, 
     '''
     Uses all the agents to synthesize a response to the user's question
     '''
+    st.write("Collating responses from all agents...")
     answer = synthesize(user_question, stock, context, concept, news)
     return {"final_answer": answer}
 
@@ -358,12 +359,16 @@ graph.set_entry_point("router")
 def route_decision(state: Dict[str, Any]) -> str:
     route = state.get("route")
     if "stock" in route:
+        st.write("Calling SQL agent...")
         return "stock_agent"
     elif "filing" in route:
+        st.write("Calling Filing agent...")
         return "filing"
     elif "news" in route:
+        st.write("Calling News agent...")
         return "news_agent"
     elif "concept" in route:
+        st.write("Calling Concept agent...")
         return "concept_agent"
     else:
         raise ValueError(f"Unknown route: {route}")
@@ -423,7 +428,7 @@ st.title("AI Agent for Financial Analysis")
 
 
 uploaded_files = st.file_uploader("Upload 3 PDF files", type="pdf", accept_multiple_files=True)
-question = st.text_input("Ask a question based on the PDFs")
+question = st.text_input("Ask me a question on finance")
 if uploaded_files and len(uploaded_files) == 3 and question:
     answer = get_financial_answer(question,uploaded_files)
     st.subheader("Answer:")
