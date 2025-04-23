@@ -69,60 +69,6 @@ df.to_sql("stock_data", conn, if_exists="replace", index=False)
 conn.commit()
 conn.close()
 
-#scrape new articles
-def is_url(text: str) -> bool:
-    return re.match(r'^https?://', text) is not None
-
-def extract_keywords_from_url(url: str) -> str:
-    slug = urlparse(url).path.split("/")[-1]
-    slug = re.sub(r'\.html$', '', slug)  # Remove trailing .html
-    words = slug.replace("-", " ").split()
-
-    # Drop common stopwords
-    stopwords = {"the", "to", "in", "and", "of", "on", "a", "an", "amid", "at", "with", "for", "as", "is", "are"}
-    keywords = [word for word in words if word.lower() not in stopwords]
-
-    # Limit to top 5 keywords for broad match
-    return " ".join(keywords[:5])
-
-
-def fetch_news_articles(query: str, max_results=1) -> list:
-    def query_news(q):
-        url = f"https://newsapi.org/v2/everything?q={q}&language=en&sortBy=publishedAt&pageSize={max_results}&apiKey={NEWS_API_KEY}"
-        response = requests.get(url)
-        return response, response.json()
-
-    response, data = query_news(query)
-
-    print(f"API Response Status Code: {response.status_code}")
-    print(f"API Response Content: {data}")
-
-    if response.status_code != 200 or not data.get("articles"):
-        fallback_query = " ".join(query.split()[:3])
-        print(f"Retrying with fallback query: {fallback_query}")
-        response, data = query_news(fallback_query)
-
-        if response.status_code != 200 or not data.get("articles"):
-            raise Exception("NewsAPI fetch failed or returned no results.")
-
-    return data["articles"]
-
-#unstructured dataset agent
-def query_db(question):
-    '''
-    Uses Mistral to convert natural language to SQL to query databases
-    '''
-    mistral_llm = HuggingFaceEndpoint(
-    repo_id="mistralai/Mistral-7B-Instruct-v0.2",
-    task="text-generation",
-    temperature=0.3,
-    max_new_tokens=256
-    )
-    db = SQLDatabase.from_uri("sqlite:////content/data/stock_data.db")
-    sql_chain = SQLDatabaseChain.from_llm(llm=mistral_llm, db=db, verbose=True)
-    return sql_chain.run(question)
-
-#synthesizer agent
 def synthesize(question, stock=None, context=None, concept=None, news=None):
     '''
     Uses all the agents to synthesize a response to the user's question
@@ -133,7 +79,6 @@ def synthesize(question, stock=None, context=None, concept=None, news=None):
 
     Stock:\n{stock or '[None]'}
     Filing:\n{context or '[None]'}
-    News:\n{news or '[None]'}
     Concept:\n{concept or '[None]'}
 
     Answer:\n{question}
@@ -141,7 +86,6 @@ def synthesize(question, stock=None, context=None, concept=None, news=None):
     return llm.invoke(prompt)
 
 
-#register functions as tools for ai agents to call
 @tool
 def router_tool(user_question: str) -> str:
     '''
@@ -213,7 +157,6 @@ def stock_tool(user_question: str) -> Dict[str, str]:
     sql_query = sql_query.replace(r"\_", "_")
     print("Final SQL:", sql_query)
 
-    # Run the SQL
     engine = create_engine("sqlite:////content/data/stock_data.db")
     try:
         with engine.connect() as conn:
@@ -244,12 +187,10 @@ def filing_tool(user_question: str, pdf_files: Union[List, None] = None) -> Dict
     if not all_text.strip():
         return {"context": "No extractable text in uploaded PDFs."}
 
-    # Chunk + Embed
     chunks = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200).create_documents([all_text])
     vectorstore = FAISS.from_documents(chunks, OpenAIEmbeddings())
     retriever = vectorstore.as_retriever()
 
-    # Try Claude RAG
     qa = RetrievalQA.from_chain_type(
             llm=ChatAnthropic(model="claude-3-opus-20240229"),
             retriever=retriever
@@ -257,51 +198,6 @@ def filing_tool(user_question: str, pdf_files: Union[List, None] = None) -> Dict
     result = qa.run(user_question)
 
     return {"context": result}
-
-@tool
-def news_tool(user_question: str) -> Dict[str, str]:
-    """
-    Summarizes a financial news article using Claude Sonnet.
-    Handles both URLs and keyword-based queries.
-    Uses zero-shot inference.
-    """
-
-    def is_url(text): return text.startswith("http")
-
-    if is_url(user_question):
-        query = extract_keywords_from_url(user_question)
-        print(f"Extracted search query from URL: {query}")
-    else:
-        query = user_question
-
-    try:
-        articles = fetch_news_articles(query, max_results=1)
-        if not articles:
-            raise Exception("No articles found.")
-
-        article = articles[0]
-        title = article["title"]
-        desc = article.get("description", "")
-        content = article.get("content", "")
-        url = article.get("url", "")
-
-        combined = f"Title: {title}\n\nDescription: {desc}\n\nContent: {content}\n\nURL: {url}"
-
-    except Exception as e:
-        if is_url(user_question):
-            print(f"NewsAPI failed: {e}. Falling back to scrape.")
-            article = Article(user_question)
-            article.download()
-            article.parse()
-            combined = f"Title: {article.title}\n\nContent: {article.text}\n\nURL: {user_question}"
-        else:
-            raise Exception("News lookup and scrape both failed.")
-
-    llm = ChatAnthropic(model="claude-3-7-sonnet-20250219")
-    prompt = f"Summarize the following financial news article:\n\n{combined}"
-    response = llm.invoke([HumanMessage(content=prompt)])
-
-    return {"news": response.content.strip()}
 
 @tool
 def concept_tool(user_question: str) -> Dict[str, str]:
@@ -325,8 +221,8 @@ def synthesize_tool(user_question: str, stock: str = None, context: str = None, 
     '''
     Uses all the agents to synthesize a response to the user's question
     '''
-    st.write("Collating responses from all agents...")
-    answer = synthesize(user_question, stock, context, concept, news)
+    st.write("Synthesizing answers from all agents...")
+    answer = synthesize(user_question, stock, context, concept)
     return {"final_answer": answer}
 
 #make stategraph
@@ -337,7 +233,6 @@ class FinancialState(TypedDict):
     route: Optional[str]
     stock: Optional[str]
     context: Optional[str]
-    news: Optional[str]
     concept: Optional[str]
     final_answer: Optional[str]
     pdf_files: Optional[List]
@@ -348,7 +243,6 @@ graph = StateGraph(state_schema=FinancialState)
 graph.add_node("router", router_tool)
 graph.add_node("stock_agent", stock_tool)
 graph.add_node("filing", filing_tool)
-graph.add_node("news_agent", news_tool)
 graph.add_node("concept_agent", concept_tool)
 graph.add_node("synthesis", synthesize_tool)
 
@@ -359,16 +253,13 @@ graph.set_entry_point("router")
 def route_decision(state: Dict[str, Any]) -> str:
     route = state.get("route")
     if "stock" in route:
-        st.write("Calling SQL agent...")
+        st.write("Caling Stock agent...")
         return "stock_agent"
     elif "filing" in route:
-        st.write("Calling Filing agent...")
+        st.write("Caling Filing agent...")
         return "filing"
-    elif "news" in route:
-        st.write("Calling News agent...")
-        return "news_agent"
     elif "concept" in route:
-        st.write("Calling Concept agent...")
+        st.write("Caling Concept agent...")
         return "concept_agent"
     else:
         raise ValueError(f"Unknown route: {route}")
@@ -377,14 +268,12 @@ def route_decision(state: Dict[str, Any]) -> str:
 graph.add_conditional_edges("router", route_decision, {
     "stock_agent": "stock_agent",
     "filing": "filing",
-    "news_agent": "news_agent",
     "concept_agent": "concept_agent"
 })
 
 # Define edges to synthesis
 graph.add_edge("stock_agent", "synthesis")
 graph.add_edge("filing", "synthesis")
-graph.add_edge("news_agent", "synthesis")
 graph.add_edge("concept_agent", "synthesis")
 
 # Set finish point
@@ -396,37 +285,179 @@ financial_agent = graph.compile()
 def get_financial_answer(user_question: str, pdf_files: Union[List, None] = None) -> str:
     """
     Routes all questions through LangGraph. The router inside decides which agent to invoke.
-    If the filing agent is triggered, it will receive pdf_files as part of state.
+    Returns the most relevant non-empty agent response.
     """
     result = financial_agent.invoke({
         "user_question": user_question,
         "pdf_files": pdf_files
     })
 
-    final = result.get("final_answer", "No answer returned.")
-    # Check if it's an AIMessage object and extract content
-    if hasattr(final, "content"):
-        return final.content
+    for key in ["stock", "context", "news", "concept"]:
+        if result.get(key) and result.get(key).strip().lower() != "none":
+            return result[key]
 
-    # If it's already a string
-    if isinstance(final, str):
-        return final
-
-    # If it's a dict with 'content' key
-    if isinstance(final, dict):
-        return final.get("content", str(final))
-
-    # Fallback to string
-    return str(final)
+    return "No meaningful output was generated."
 
 
+'''
+Evaluation
+'''
+
+from typing import Dict
+from langchain.chat_models import ChatOpenAI
+from langchain_core.messages import HumanMessage
+
+evaluator_llm = ChatOpenAI(model="gpt-4")
+
+def evaluate_agent_output(user_question: str, agent_response: str, evidence: str = None) -> Dict[str, str]:
+    if evidence and evidence.strip().lower() != "none":
+        prompt = f"""
+        You are an expert evaluator of AI-generated responses.
+        Evaluate the following AI response to a user question using the provided supporting evidence.
+
+        ### User Question:
+        {user_question}
+
+        ### AI Response:
+        {agent_response}
+
+        ### Supporting Evidence:
+        {evidence}
+
+        Evaluate on the following criteria:
+        1. **Relevance** (0–10): Does the AI response directly and completely answer the user's question?
+        2. **Hallucination** (0–10): Does the AI add information that is not clearly supported by the evidence?
+        3. **Short Explanation**: Describe any mismatches, missing details, or unsupported claims.
+
+        Respond in the following format:
+        Relevance Score: X
+        Hallucination Score: Y
+        Explanation: ...
+        """
+    else:
+        prompt = f"""
+        You are an expert evaluator of AI-generated responses.
+        Evaluate the following AI response to a user question.
+
+        ### User Question:
+        {user_question}
+
+        ### AI Response:
+        {agent_response}
+
+        Evaluate on the following criteria:
+        1. **Relevance** (0–10): Does the AI response directly and completely answer the user's question?
+        2. **Hallucination** (0–10): Does the AI include fabricated or irrelevant information?
+        3. **Short Explanation**: Mention if the answer is vague, off-topic, or unsupported by the question.
+
+        Respond in the following format:
+        Relevance Score: X
+        Hallucination Score: Y
+        Explanation: ...
+        """
+
+    result = evaluator_llm.invoke([HumanMessage(content=prompt)])
+    return result.content
+
+evaluator_llm = ChatOpenAI(model="gpt-4")
+
+def evaluate_sql_query(user_question: str, sql_query: str, schema_description: str) -> dict:
+    """
+    Uses GPT-4 to evaluate the SQL query generated for a user's question.
+
+    Returns:
+        dict with relevance_score, hallucination_score, and explanation.
+    """
+    prompt = f"""
+    You are an expert SQL evaluator.
+
+    Evaluate the following SQL query based on how well it answers the user's question,
+    and whether it introduces any hallucinated columns, logic, or structure.
+
+    ### Table Schema:
+    {schema_description}
+
+    ### User Question:
+    {user_question}
+
+    ### SQL Query:
+    {sql_query}
+
+    Rate the query on:
+    - Relevance (0–10): Does the SQL reflect the question's intent accurately?
+    - Hallucination (0–10): Does the SQL include any invented fields, tables, or unsupported logic?
+
+    Respond in this format:
+    Relevance Score: X
+    Hallucination Score: Y
+    Explanation: ...
+    """
+
+    result = evaluator_llm.invoke([HumanMessage(content=prompt)])
+    return result.content
+'''
+Example code to call evaluator for filing agent.
+answer = get_financial_answer("Extract key highlights from Microsoft’s MD&A section.", pdf_files=pdf_files)
+evaluate_agent_output("Extract key highlights from Microsoft’s MD&A section.", answer['context'], answer['evidence'])
+'''
+
+batch_results = []
+for question in questions:
+    result = get_financial_answer(question)
+    if "context" not in result or result["context"].strip().lower() == "none":
+      continue
+    evaluation = evaluate_agent_output(question, result["context"], result["evidence"])
+    batch_results.append({
+        "question": question,
+        "answer": result["context"],
+        "evidence": result["evidence"],
+        "evaluation": evaluation
+    })
+
+df_eval = pd.DataFrame(batch_results)
+def parse_scores(evaluation_text):
+    relevance = hallucination = None
+    for line in evaluation_text.split("\n"):
+        if "Relevance Score" in line:
+            relevance = int(re.search(r'\d+', line).group())
+        elif "Hallucination Score" in line:
+            hallucination = int(re.search(r'\d+', line).group())
+    return relevance, hallucination
+
+df_eval[["relevance_score", "hallucination_score"]] = df_eval["evaluation"].apply(
+    lambda x: pd.Series(parse_scores(x))
+)
+
+# Compute averages
+average_relevance = df_eval["relevance_score"].mean()
+average_hallucination = df_eval["hallucination_score"].mean()
+def parse_scores(evaluation_text):
+    relevance = hallucination = None
+    for line in evaluation_text.split("\n"):
+        if "Relevance Score" in line:
+            relevance = int(re.search(r'\d+', line).group())
+        elif "Hallucination Score" in line:
+            hallucination = int(re.search(r'\d+', line).group())
+    return relevance, hallucination
+
+df_eval[["relevance_score", "hallucination_score"]] = df_eval["evaluation"].apply(
+    lambda x: pd.Series(parse_scores(x))
+)
+
+# Compute averages
+average_relevance = df_eval["relevance_score"].mean()
+average_hallucination = df_eval["hallucination_score"].mean()
+
+results = {
+    "Average Relevance Score": round(average_relevance, 2),
+    "Average Hallucination Score": round(average_hallucination, 2)
+}
+with open('results.json', 'w') as f:
+    json.dump(results, f)
 
 # call streamlit
 
 st.title("AI Agent for Financial Analysis")
-
-
-
 uploaded_files = st.file_uploader("Upload 3 PDF files", type="pdf", accept_multiple_files=True)
 question = st.text_input("Ask me a question on finance")
 if uploaded_files and len(uploaded_files) == 3 and question:
