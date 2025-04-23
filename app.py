@@ -400,6 +400,60 @@ Example code to call evaluator for filing agent.
 answer = get_financial_answer("Extract key highlights from Microsoft’s MD&A section.", pdf_files=pdf_files)
 evaluate_agent_output("Extract key highlights from Microsoft’s MD&A section.", answer['context'], answer['evidence'])
 '''
+questions = [
+    "Summarize Tesla’s key highlights from the latest MD&A section.",
+    "What are Microsoft’s core business segments and how did each perform this quarter?",
+    "What guidance did Apple provide for future revenue growth?",
+    "How did Tesla’s operating income change compared to the previous quarter?",
+    "What major trends are discussed in Microsoft’s industry overview?",
+    "What does Apple cite as the primary drivers of growth this quarter?",
+    "How did Microsoft’s cost of revenue evolve?",
+    "What are Tesla’s R&D priorities this quarter?",
+    "Summarize the fiscal outlook Apple provided in its latest report.",
+    "What updates did Microsoft give on Azure’s performance?",
+    "What risks did Tesla highlight related to raw material sourcing?",
+    "What litigation risks does Apple mention?",
+    "How does Microsoft describe its competitive threats in cloud?",
+    "Did Apple disclose any cybersecurity incidents?",
+    "What financial risks are associated with Tesla’s supply chain?",
+    "What legal proceedings involve Microsoft this quarter?",
+    "Did Tesla update its risk disclosure around vehicle recalls?",
+    "How does Apple assess currency exchange rate risk?",
+    "What geopolitical risks are flagged in Microsoft’s 10-Q?",
+    "Has Tesla added any new risk factors this quarter?",
+    "What was the revenue from Apple’s iPhone segment this quarter?",
+    "How did Tesla Energy perform relative to prior quarters?",
+    "How did Microsoft's Productivity and Business Processes segment perform?",
+    "What is the breakdown of Apple’s Services revenue?",
+    "What trends does Tesla report for its automotive regulatory credits?",
+    "What was the growth rate for Microsoft’s Intelligent Cloud segment?",
+    "How does Apple categorize its Wearables and Home Accessories revenue?",
+    "Has Tesla provided updated unit delivery numbers?",
+    "How much revenue did Microsoft’s Surface line generate?",
+    "How did Apple’s Mac revenue compare to the previous quarter?",
+    "What was Apple’s gross margin this quarter?",
+    "How did Tesla’s cost of goods sold change?",
+    "Did Microsoft disclose any major cost optimizations?",
+    "What were Apple’s R&D and SG&A expenses?",
+    "What does Tesla attribute its margin compression to?",
+    "What is Microsoft’s reported operating margin?",
+    "How much cash on hand does Apple report?",
+    "Did Tesla make any notable capital expenditures?",
+    "What were Microsoft’s investing activities this quarter?",
+    "How much did Apple return to shareholders via dividends or buybacks?",
+    "What future plans did Tesla outline in its outlook?",
+    "What new product directions does Apple hint at?",
+    "Does Microsoft indicate further expansion into AI or cloud services?",
+    "What are Tesla’s global expansion plans?",
+    "How does Apple describe its long-term sustainability strategy?",
+    "Did Tesla update its depreciation schedule or accounting methods?",
+    "What are Apple’s off-balance-sheet arrangements?",
+    "What employee-related disclosures does Microsoft provide?",
+    "How does Tesla report on regulatory or ESG compliance?",
+    "Does Apple disclose any material changes in leadership or governance?"
+]
+
+
 
 batch_results = []
 for question in questions:
