@@ -27,13 +27,15 @@ The system uses the LangGraph framework to orchestrate AI agents:
 
 ---
 
-## 📂 Repository Structure
+## Repository Structure
 
 ```bash
 ├── app.py             # Defines agent tools, logic, and LangGraph graph
 ├── run.ipynb          # Jupyter Notebook interface to run and test the application
 ├── evaluate.py        # Evaluation script for system performance and agent outputs
 ├── README.md          # Project documentation
+```
+---
 
 ## Instructions to run the application :
 
