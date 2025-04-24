@@ -19,7 +19,7 @@ Traditional financial analysis can be time-consuming and technically challenging
 
 The system uses the LangGraph framework to orchestrate AI agents:
 
-- **Router Agent (GPT-3.5)**: Classifies the user query into `stock`, `filing`, `news`, or `concept`
+- **Router Agent (GPT-3.5)**: Classifies the user query into `stock`, `filing` or `concept`
 - **Stock Agent (Mistral)**: Generates SQL to query financial stock data
 - **Filing Agent (Claude Opus)**: Performs RAG over 10-K/10-Q PDFs using FAISS
 - **Concept Agent (Claude Opus)**: Explains financial concepts like DCF, ROE, etc.
